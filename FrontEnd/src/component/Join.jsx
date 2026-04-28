@@ -15,6 +15,7 @@ import {
   setMessage,
   fetchChats,
   getMessage,
+  markChatReadApi,
   markViewOnceMessage,
   deleteMessageForEveryone,
   deleteMessageForMe,
@@ -27,13 +28,15 @@ import {
   unblockUserApi,
   moderateBlockUserApi,
 } from "../api/api-post";
+import { API_BASE_URL } from "../api/client";
 import { getSender, getSenderFull, isSameSenderMargin, isSameUser } from "../config/chatLogic";
 import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import Autocomplete from "@mui/material/Autocomplete";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTheme } from "../Context/ThemeProvider";
 
 let socket;
 let selectedChatCompare;
@@ -281,6 +284,8 @@ const Join = () => {
   const jwt = auth.isAuthenticated();
   const user1 = jwt1(jwt.token);
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { theme, toggleTheme } = useTheme();
   const loading = searchResult.length !== 0 && open;
   const open1 = Boolean(anchorEl);
   const messageMenuOpen = Boolean(messageMenuAnchorEl);
@@ -289,6 +294,9 @@ const Join = () => {
   const typingTimeoutRef = useRef(null);
   const selectedMediaRef = useRef([]);
   const activeChatUserNameRef = useRef("");
+  const autoOpenedQueryChatRef = useRef("");
+  const openSelectedChatRef = useRef(null);
+  const syncChatReadStateRef = useRef(null);
 
   const getAvatar = (user) => user?.image || DEFAULT_AVATAR;
   const isSelectedUserBlocked = Array.isArray(currentUserProfile?.blockedUsers)
@@ -327,6 +335,31 @@ const Join = () => {
     if (profile) {
       setSelectedProfile(profile);
       setShowProfilePanel(true);
+    }
+  };
+
+  const clearNotificationsForChat = (chatId) => {
+    const chatIdString = toIdString(chatId);
+
+    setNotification((currentNotification) =>
+      currentNotification.filter(
+        (item) => toIdString(item.chat?._id || item.chat) !== chatIdString
+      )
+    );
+  };
+
+  const syncChatReadState = async (chatId) => {
+    if (!chatId) {
+      return;
+    }
+
+    try {
+      await markChatReadApi(
+        { chatId },
+        { t: jwt.token }
+      );
+    } catch (error) {
+      console.log(error);
     }
   };
 
@@ -375,8 +408,9 @@ const Join = () => {
         setSelectChat(true);
         setValue1(targetUser);
         setChat(targetChat);
+        setShowProfilePanel(false);
       }, 250);
-      openProfilePanel(targetUser);
+      clearNotificationsForChat(targetChat?._id);
     } catch (error) {
       alert(error.message || "Could not unlock this chat");
     }
@@ -420,10 +454,8 @@ const Join = () => {
     setSelectChat(true);
     setValue1(targetUser);
     setChat(notiy.chat);
-    setNotification((currentNotification) =>
-      currentNotification.filter((item) => item !== notiy)
-    );
-    openProfilePanel(targetUser);
+    setShowProfilePanel(false);
+    clearNotificationsForChat(notiy.chat?._id);
   };
 
   const appendEmoji = (emoji) => {
@@ -527,11 +559,37 @@ const Join = () => {
       setSelectChat(true);
       setValue1(targetUser);
       setChat(data);
-      openProfilePanel(targetUser);
+      setShowProfilePanel(false);
+      clearNotificationsForChat(data?._id);
     }
 
     Setloading1(false);
   };
+  openSelectedChatRef.current = openSelectedChat;
+  syncChatReadStateRef.current = syncChatReadState;
+
+  useEffect(() => {
+    const requestedUserId = searchParams.get("userId");
+
+    if (!requestedUserId || requestedUserId === user1.id) {
+      return;
+    }
+
+    if (autoOpenedQueryChatRef.current === requestedUserId) {
+      return;
+    }
+
+    autoOpenedQueryChatRef.current = requestedUserId;
+
+    read(
+      { userId: requestedUserId },
+      { t: jwt.token }
+    ).then((profile) => {
+      if (profile?._id) {
+        openSelectedChatRef.current?.(profile);
+      }
+    });
+  }, [jwt.token, searchParams, user1.id]);
 
   const applyDeletedMessage = (message, userId) => ({
     ...message,
@@ -931,6 +989,9 @@ const Join = () => {
         );
 
         setMessages(data);
+        await syncChatReadStateRef.current?.(chat._id);
+        clearNotificationsForChat(chat._id);
+        setFetchAgain((currentValue) => !currentValue);
         socket.emit("join chat", chat._id);
       } catch (error) {
         console.log(error);
@@ -942,7 +1003,7 @@ const Join = () => {
   }, [chat, jwt.token, selectChat, user1.id]);
 
   useEffect(() => {
-    socket = io("http://localhost:4000/");
+    socket = io(API_BASE_URL || undefined);
 
     const handlePresenceUpdate = (payload) => {
       if (!payload?.userId) {
@@ -1053,9 +1114,14 @@ const Join = () => {
     if (!socketcon) return;
 
     const handleMessageReceived = (newMessageRecieved) => {
+      const receivedChatId = toIdString(
+        newMessageRecieved.chat?._id || newMessageRecieved.chat
+      );
+      const activeChatId = toIdString(selectedChatCompare?._id);
+
       if (
         !selectedChatCompare ||
-        selectedChatCompare._id !== newMessageRecieved.chat._id
+        activeChatId !== receivedChatId
       ) {
         setNotification((currentNotification) => {
           const alreadyPresent = currentNotification.some(
@@ -1067,7 +1133,14 @@ const Join = () => {
             : [newMessageRecieved, ...currentNotification];
         });
       } else {
-        setMessages((currentMessages) => [...currentMessages, newMessageRecieved]);
+        const readMessage = {
+          ...newMessageRecieved,
+          readBy: [...new Set([...(newMessageRecieved.readBy || []), user1.id])],
+        };
+
+        setMessages((currentMessages) => [...currentMessages, readMessage]);
+        clearNotificationsForChat(receivedChatId);
+        syncChatReadStateRef.current?.(receivedChatId);
       }
 
       setFetchAgain((currentValue) => !currentValue);
@@ -1078,7 +1151,7 @@ const Join = () => {
     return () => {
       socket.off("message recieved", handleMessageReceived);
     };
-  }, [socketcon]);
+  }, [jwt.token, socketcon, user1.id]);
 
   useEffect(() => {
     selectedMediaRef.current = selectedMedia;
@@ -1109,27 +1182,31 @@ const Join = () => {
 
   const change = (mode) => {
     if (mode === "dark") {
-      setChatColor("#444F5A");
-      setColor3("#222831");
-      setTextC("white");
-      setColor4("#222831");
-      setStext("#D8D3CD");
+      setChatColor("#18242d");
+      setColor3("#101920");
+      setTextC("#eff5f8");
+      setColor4("#0f171d");
+      setStext("#9fb0bb");
       setbsckim("jbVvEcAi.jpg");
-      setf("#274528");
-      setsc("#393E46");
+      setf("#28524d");
+      setsc("#1f2d37");
       setim("jbVvEcAi.jpg");
     } else {
-      setChatColor("white");
-      setColor3("white");
+      setChatColor("#ffffff");
+      setColor3("#ffffff");
       setim("123.png");
-      setTextC("black");
-      setColor4("#dee2e6");
-      setStext("gray");
+      setTextC("#1c2730");
+      setColor4("#eef1f5");
+      setStext("#5f6f7b");
       setbsckim("123.png");
       setf("#b8ebb4");
-      setsc("white");
+      setsc("#ffffff");
     }
   };
+
+  useEffect(() => {
+    change(theme);
+  }, [theme]);
 
   const typingHandler = (e) => {
     const activeChatId = chat?._id || chat?.id || chat?.chatId;
@@ -1187,18 +1264,32 @@ const Join = () => {
     : value1?.isOnline
       ? "Online"
       : formatLastSeen(value1?.lastSeen);
+  const totalUnreadCount = chats.reduce(
+    (currentValue, singleChat) =>
+      currentValue + (Number(singleChat.unreadCount) || 0),
+    0
+  );
+  const unreadChats = chats.filter((singleChat) => Number(singleChat.unreadCount) > 0);
   const visibleChats = chats.filter((singleChat) =>
     showArchivedChats
       ? Boolean(singleChat.archivedForCurrentUser)
       : !singleChat.archivedForCurrentUser
   );
+  const activeChatBackground =
+    theme === "dark"
+      ? `linear-gradient(180deg, rgba(9, 15, 19, 0.74) 0%, rgba(12, 18, 24, 0.82) 100%), url(../images/${backim})`
+      : `linear-gradient(180deg, rgba(255, 255, 255, 0.66) 0%, rgba(244, 247, 250, 0.78) 100%), url(../images/${backim})`;
+  const emptyChatBackground =
+    theme === "dark"
+      ? `linear-gradient(180deg, rgba(9, 15, 19, 0.78) 0%, rgba(12, 18, 24, 0.86) 100%), url(../images/${ima})`
+      : `linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(244, 247, 250, 0.82) 100%), url(../images/${ima})`;
 
   return (
     <div>
       <div>
-        <section className="vh-100 d-flex grey2">
+        <section className="vh-100 d-flex grey2 chat-layout">
           <div
-            className="col-4 p-0 h-100 "
+            className={`col-4 p-0 h-100 chat-sidebar-pane ${selectChat ? "chat-sidebar-pane-hidden" : ""}`}
             style={{ backgroundColor: `${Color4}` }}
           >
             <div
@@ -1262,7 +1353,7 @@ const Join = () => {
                     )}
                     renderInput={(params) => (
                       <TextField
-                        className="rounded bg-white"
+                        className="rounded chat-search-field"
                         sx={{ p: "0px" }}
                         size="small"
                         onChange={(e) => setSearch(e.target.value)}
@@ -1294,7 +1385,7 @@ const Join = () => {
                     aria-expanded={open1 ? "true" : undefined}
                     onClick={handleClick}
                     color="secondary"
-                    badgeContent={notification.length}
+                    badgeContent={Math.max(notification.length, totalUnreadCount)}
                   >
                     <MailIcon color="primary" fontSize="large" />
                   </Badge>
@@ -1310,15 +1401,37 @@ const Join = () => {
                   onClose={handleClose}
                   TransitionComponent={Fade}
                 >
-                  {notification.length === 0 ? (
-                    <MenuItem onClick={handleClose}>No Message</MenuItem>
+                  {notification.length === 0 && unreadChats.length === 0 ? (
+                    <MenuItem onClick={handleClose}>No unread messages</MenuItem>
                   ) : (
                     <div>
-                      {notification.map((notify) => (
-                        <MenuItem key={notify._id} onClick={() => handleClose1(notify)}>
-                          "New Message from : " {getSender(user1, notify.chat.users)}
-                        </MenuItem>
-                      ))}
+                      {notification.length > 0
+                        ? notification.map((notify) => (
+                            <MenuItem key={notify._id} onClick={() => handleClose1(notify)}>
+                              <div className="chat-notification-item">
+                                <strong>{getSender(user1, notify.chat.users)}</strong>
+                                <span>{getLatestMessagePreview(notify, user1.id) || "New message"}</span>
+                              </div>
+                            </MenuItem>
+                          ))
+                        : unreadChats.map((singleChat) => {
+                            const chatUser = getSenderFull(user1, singleChat.users);
+
+                            return (
+                              <MenuItem
+                                key={singleChat._id}
+                                onClick={() => {
+                                  handleClose();
+                                  openChatWindow(singleChat, chatUser);
+                                }}
+                              >
+                                <div className="chat-notification-item">
+                                  <strong>{getSender(user1, singleChat.users)}</strong>
+                                  <span>{singleChat.unreadCount} unread message(s)</span>
+                                </div>
+                              </MenuItem>
+                            );
+                          })}
                     </div>
                   )}
                 </Menu>
@@ -1327,21 +1440,16 @@ const Join = () => {
 
             <div className="justify-content-center scroll overflow-auto px-3 mt-2">
               <div className="mb-2 chat-sidebar-toolbar">
-                <i
-                  className="fa fa-moon-o btn btn-dark mb-1"
-                  onClick={() => change("dark")}
-                >
-                  dark
-                </i>
                 <button
-                  className="fa fa-moon-o btn btn-light mb-1"
-                  onClick={() => change("light")}
+                  type="button"
+                  className="chat-sidebar-toggle-btn mb-1"
+                  onClick={toggleTheme}
                 >
-                  light
+                  {theme === "dark" ? "Light mode" : "Dark mode"}
                 </button>
                 <button
                   type="button"
-                  className="btn btn-outline-secondary mb-1 ms-2"
+                  className="chat-sidebar-toggle-btn mb-1 ms-2"
                   onClick={() => setShowArchivedChats((currentValue) => !currentValue)}
                 >
                   {showArchivedChats ? "Show inbox" : "Show archived"}
@@ -1355,7 +1463,7 @@ const Join = () => {
                   <div key={singleChat._id}>
                     {singleChat.latestMessage ? (
                       <div
-                        className="d-flex text-white align-items-center justify-content-between px-3 py-1 hovering shadow-sm mb-1 border-radius"
+                        className={`d-flex align-items-center justify-content-between px-3 py-1 hovering shadow-sm mb-1 border-radius chat-thread-card ${singleChat.hasUnread ? "unread" : ""}`}
                         onClick={() => openChatWindow(singleChat, chatUser)}
                         style={{
                           backgroundColor: `${ChatColor}`,
@@ -1377,19 +1485,22 @@ const Join = () => {
                           <div className="mt-3">
                             <h6
                               style={{ color: `${TextColor}` }}
-                              className="m-0 text-lg-left font-weight-bold"
+                              className={`m-0 text-lg-left font-weight-bold ${singleChat.hasUnread ? "chat-thread-title-unread" : ""}`}
                             >
                               {getSender(user1, singleChat.users)}
                               {singleChat.passwordProtected ? (
                                 <span className="chat-chat-chip ms-2">Locked</span>
                               ) : null}
                             </h6>
-                            <p style={{ color: `${STextColor}` }} className="chat-preview-text">
+                            <p
+                              style={{ color: `${STextColor}` }}
+                              className={`chat-preview-text ${singleChat.hasUnread ? "unread" : ""}`}
+                            >
                               {getLatestMessagePreview(singleChat.latestMessage, user1.id)}
                             </p>
                           </div>
                         </div>
-                        <div>
+                        <div className="chat-thread-meta">
                           <p
                             className="m-0 mb-2"
                             style={{ color: `${STextColor}` }}
@@ -1402,6 +1513,11 @@ const Join = () => {
                               }
                             )}
                           </p>
+                          {singleChat.unreadCount > 0 ? (
+                            <span className="chat-unread-pill">
+                              {singleChat.unreadCount}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     ) : null}
@@ -1412,7 +1528,7 @@ const Join = () => {
           </div>
 
           {selectChat ? (
-            <div className="col-8 h-100 p-0">
+            <div className="col-8 h-100 p-0 chat-content-pane">
               <div
                 style={{
                   backgroundColor: `${Color3}`,
@@ -1467,14 +1583,14 @@ const Join = () => {
                     className="chat-close-btn"
                     onClick={() => setSelectChat(false)}
                   >
-                    <i className="fa fa-window-close fs-4 text-secondary" />
+                    <i className="fa fa-window-close fs-4 chat-muted-icon" />
                   </button>
                 </div>
               </div>
 
               <div
                 style={{
-                  backgroundImage: `url(../images/${backim})`,
+                  backgroundImage: activeChatBackground,
                 }}
                 className="scroll2 overflow-auto mb-0 px-5 py-3"
               >
@@ -1681,7 +1797,7 @@ const Join = () => {
                     >
                       {viewOnceEnabled ? "View once on" : "View once off"}
                     </button>
-                    <span className="small text-secondary">
+                    <span className="small chat-muted-copy">
                       {selectedMedia.length} photo
                       {selectedMedia.length > 1 ? "s" : ""} selected
                     </span>
@@ -1720,7 +1836,7 @@ const Join = () => {
                   aria-label="Open emoji picker"
                   onClick={() => setShowEmojiPicker((currentValue) => !currentValue)}
                 >
-                  <i className="fa-regular fa-face-laugh-beam fs-4 me-3 text-secondary" />
+                  <i className="fa-regular fa-face-laugh-beam fs-4 me-3 chat-muted-icon" />
                 </button>
 
                 <input
@@ -1739,10 +1855,11 @@ const Join = () => {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!chat?._id || imageUploading || chatBlockedForMessaging}
                 >
-                  <i className="fa-solid fa-paperclip fs-4 me-3 text-secondary" />
+                  <i className="fa-solid fa-paperclip fs-4 me-3 chat-muted-icon" />
                 </button>
 
                 <input
+                  className="form-control grey p-2 chat-input-field"
                   style={{
                     backgroundColor: `${Color4}`,
                     color: `${TextColor}`,
@@ -1750,7 +1867,6 @@ const Join = () => {
                   value={newMessage}
                   onChange={typingHandler}
                   type="text"
-                  className="form-control grey p-2"
                   placeholder="type a message"
                   aria-label="First name"
                   onKeyDown={handleKeyDown}
@@ -1758,7 +1874,7 @@ const Join = () => {
                 />
 
                 {imageUploading ? (
-                  <span className="me-2 text-secondary small">Uploading...</span>
+                  <span className="me-2 chat-muted-copy small">Uploading...</span>
                 ) : null}
 
                 <i
@@ -1841,10 +1957,10 @@ const Join = () => {
             </div>
           ) : (
             <div
+              className="scroll2 col-8 h-100 p-0 bg-black chat-content-pane chat-empty-pane"
               style={{
-                backgroundImage: `url(../images/${ima})`,
+                backgroundImage: emptyChatBackground,
               }}
-              className="scroll2 col-8 h-100 p-0 bg-black"
             >
               {!loading1 ? (
                 <h1 className="f align-center" style={{ color: TextColor }}>

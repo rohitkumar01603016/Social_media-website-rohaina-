@@ -20,6 +20,7 @@ import NavBar from "./NavBar";
 
 const DEFAULT_AVATAR =
   "https://img.freepik.com/premium-vector/man-avatar-profile-picture-vector-illustration_268834-541.jpg";
+const STORY_VIEW_DURATION = 15000;
 
 const uploadStoryImage = async (file) => {
   const data = new FormData();
@@ -47,12 +48,34 @@ const HomePage = () => {
   const [profile, setProfile] = useState(null);
   const [stories, setStories] = useState([]);
   const [activeStory, setActiveStory] = useState(null);
+  const [storyViewerProgress, setStoryViewerProgress] = useState(0);
   const [storyUploading, setStoryUploading] = useState(false);
 
   const nav = useNavigate();
   const storyInputRef = useRef(null);
+  const openStoryRef = useRef(null);
+  const storyViewerIntervalRef = useRef(null);
+  const storyViewerTimeoutRef = useRef(null);
   const jwt = auth.isAuthenticated();
   const user1 = jwt1(jwt.token);
+
+  const clearStoryViewerTimers = () => {
+    if (storyViewerIntervalRef.current) {
+      window.clearInterval(storyViewerIntervalRef.current);
+      storyViewerIntervalRef.current = null;
+    }
+
+    if (storyViewerTimeoutRef.current) {
+      window.clearTimeout(storyViewerTimeoutRef.current);
+      storyViewerTimeoutRef.current = null;
+    }
+  };
+
+  const closeStoryViewer = () => {
+    clearStoryViewerTimers();
+    setStoryViewerProgress(0);
+    setActiveStory(null);
+  };
 
   const Addone = (data1) => {
     setnew(true);
@@ -119,6 +142,8 @@ const HomePage = () => {
   };
 
   const openStory = async (story) => {
+    setStoryViewerProgress(0);
+
     try {
       if (
         story.author?._id !== user1.id &&
@@ -141,6 +166,16 @@ const HomePage = () => {
       });
     }
   };
+
+  const openStoryByIndex = async (index) => {
+    if (index < 0 || index >= stories.length) {
+      setActiveStory(null);
+      return;
+    }
+
+    await openStory(stories[index]);
+  };
+  openStoryRef.current = openStory;
 
   const handleStoryLike = async () => {
     if (!activeStory) {
@@ -241,6 +276,40 @@ const HomePage = () => {
       postDate.getFullYear() === now.getFullYear()
     );
   }).length;
+  const activeStoryIndex = activeStory
+    ? stories.findIndex((story) => story._id === activeStory._id)
+    : -1;
+
+  useEffect(() => {
+    if (!activeStory?._id) {
+      clearStoryViewerTimers();
+      setStoryViewerProgress(0);
+      return undefined;
+    }
+
+    setStoryViewerProgress(0);
+    const startedAt = Date.now();
+
+    storyViewerIntervalRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(100, (elapsed / STORY_VIEW_DURATION) * 100);
+      setStoryViewerProgress(progress);
+    }, 120);
+
+    storyViewerTimeoutRef.current = window.setTimeout(() => {
+      const nextStory = stories[activeStoryIndex + 1];
+
+      if (nextStory) {
+        openStoryRef.current?.(nextStory);
+      } else {
+        setActiveStory(null);
+      }
+    }, STORY_VIEW_DURATION);
+
+    return () => {
+      clearStoryViewerTimers();
+    };
+  }, [activeStory?._id, activeStoryIndex, stories]);
 
   return (
     <div className="feed-page">
@@ -330,7 +399,7 @@ const HomePage = () => {
                     <span className="story-copy">
                       <strong>{story.author?.name || "Story"}</strong>
                       <span>
-                        {story.likeCount || 0} likes · {story.viewerCount || 0} views
+                        {story.likeCount || 0} likes | {story.viewerCount || 0} views
                       </span>
                     </span>
                   </button>
@@ -398,7 +467,7 @@ const HomePage = () => {
       </section>
 
       {activeStory ? (
-        <div className="story-modal" onClick={() => setActiveStory(null)}>
+        <div className="story-modal" onClick={closeStoryViewer}>
           <div
             className="story-modal-card"
             onClick={(event) => event.stopPropagation()}
@@ -408,7 +477,53 @@ const HomePage = () => {
               style={{
                 backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(26,16,12,0.28)), url(${activeStory.media?.[0] || activeStory.author?.image || DEFAULT_AVATAR})`,
               }}
-            />
+            >
+              <div className="story-viewer-topbar">
+                <div className="story-progress-shell">
+                  <span
+                    className="story-progress-fill"
+                    style={{ width: `${storyViewerProgress}%` }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="story-viewer-close"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeStoryViewer();
+                  }}
+                >
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              </div>
+
+              <div className="story-viewer-nav">
+                <button
+                  type="button"
+                  className="story-viewer-nav-btn"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    clearStoryViewerTimers();
+                    openStoryByIndex(activeStoryIndex - 1);
+                  }}
+                  disabled={activeStoryIndex <= 0}
+                >
+                  {"<"}
+                </button>
+                <button
+                  type="button"
+                  className="story-viewer-nav-btn"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    clearStoryViewerTimers();
+                    openStoryByIndex(activeStoryIndex + 1);
+                  }}
+                  disabled={activeStoryIndex === -1 || activeStoryIndex >= stories.length - 1}
+                >
+                  {">"}
+                </button>
+              </div>
+            </div>
             <div className="story-modal-copy">
               <div>
                 <div className="brand-inline mb-4">
@@ -472,7 +587,11 @@ const HomePage = () => {
                     </div>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="story-owner-note">
+                  Only the uploader can see the full viewer and like list for this story.
+                </div>
+              )}
 
               <div className="d-flex gap-2 flex-wrap">
                 {activeStory.author?._id !== user1.id ? (
@@ -495,7 +614,7 @@ const HomePage = () => {
                 <button
                   type="button"
                   className="landing-btn secondary"
-                  onClick={() => setActiveStory(null)}
+                  onClick={closeStoryViewer}
                 >
                   Close
                 </button>
@@ -503,7 +622,7 @@ const HomePage = () => {
                   type="button"
                   className="landing-btn secondary"
                   onClick={() => {
-                    setActiveStory(null);
+                    closeStoryViewer();
                     nav("/user/" + activeStory.author?._id);
                   }}
                 >

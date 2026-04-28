@@ -5,6 +5,7 @@ const Story = require("../../Schema/Story");
 const Chat = require("../../Schema/Chat");
 const Message = require("../../Schema/message");
 const { moderateMessageWithGemini } = require("../../utils/geminiModeration");
+const { askGeminiSupportAssistant } = require("../../utils/geminiSupport");
 
 const changePassword = async (req, res) => {
   const currentPassword =
@@ -197,10 +198,49 @@ const moderateAndBlockUser = async (req, res) => {
   }
 };
 
+const getSupportAssistantReply = async (req, res) => {
+  const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+  const attachments = Array.isArray(req.body.attachments)
+    ? req.body.attachments
+        .slice(0, 3)
+        .filter(
+          (attachment) =>
+            attachment &&
+            typeof attachment === "object" &&
+            typeof attachment.mimeType === "string" &&
+            typeof attachment.data === "string"
+        )
+    : [];
+
+  if (!message) {
+    return res.status(400).json({
+      error: "Support message is required",
+    });
+  }
+
+  try {
+    const reply = await askGeminiSupportAssistant({
+      message,
+      userName: req.user?.name,
+      attachments,
+    });
+
+    return res.json({
+      success: true,
+      reply,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error: error.message || "Could not get support reply",
+    });
+  }
+};
+
 module.exports = {
   changePassword,
   deleteAccount,
   blockUser,
   unblockUser,
   moderateAndBlockUser,
+  getSupportAssistantReply,
 };

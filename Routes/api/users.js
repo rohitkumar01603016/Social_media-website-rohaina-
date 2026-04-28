@@ -19,6 +19,7 @@ const {
   blockUser,
   unblockUser,
   moderateAndBlockUser,
+  getSupportAssistantReply,
 } = require("../../Controllers/users/accountControllers")
 
 router.post('/register',RegisterControllers)
@@ -29,6 +30,7 @@ router.put('/password',auth,changePassword)
 router.put('/block',auth,blockUser)
 router.put('/unblock',auth,unblockUser)
 router.post('/moderate-block',auth,moderateAndBlockUser)
+router.post('/support-assistant',auth,getSupportAssistantReply)
 router.get('/findpeople/:userId',auth,findpeaple)
 router.get('/:userId',read)
 router.put('/update/:userId',check,update)

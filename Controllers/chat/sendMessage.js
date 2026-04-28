@@ -63,6 +63,7 @@ const sendMessage = async (req, res) => {
     images: mediaItems,
     viewOnce: viewOnce && mediaItems.length > 0,
     chat: chatId,
+    readBy: [senderId],
   };
 
   try {

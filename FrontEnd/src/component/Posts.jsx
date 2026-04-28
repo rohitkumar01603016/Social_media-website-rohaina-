@@ -192,7 +192,7 @@ const Posts = (props) => {
           className="feed-action-meta feed-action-meta-btn"
           onClick={() => setShowLikes((currentValue) => !currentValue)}
         >
-          {values.likes} likes · {values.comments.length} comments
+          {values.likes} likes | {values.comments.length} comments
         </button>
       </div>
 

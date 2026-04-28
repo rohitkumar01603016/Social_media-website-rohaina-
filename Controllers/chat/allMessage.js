@@ -2,6 +2,21 @@ const Message = require("../../Schema/message");
 
 const allMessage = async (req, res) => {
   try {
+    await Message.updateMany(
+      {
+        chat: req.params.chatId,
+        sender: { $ne: req.user._id },
+        readBy: { $ne: req.user._id },
+        deletedFor: { $ne: req.user._id },
+        deletedForEveryone: { $ne: true },
+      },
+      {
+        $addToSet: {
+          readBy: req.user._id,
+        },
+      }
+    );
+
     const messages = await Message.find({ chat: req.params.chatId })
       .populate("sender", "name image email isOnline lastSeen")
       .populate("chat");

@@ -692,6 +692,18 @@ const deleteMessageForMe = async (params, credentials) => {
   }
 };
 
+const markChatReadApi = async (params, credentials) => {
+  try {
+    return await requestJson("/api/message/read/" + params.chatId, {
+      method: "PUT",
+      headers: buildHeaders(credentials),
+    });
+  } catch (err) {
+    console.log(err);
+    throw err;
+  }
+};
+
 const createStory = async (params, credentials, story) => {
   try {
     return await requestJson("/api/story/" + params.userId, {
@@ -882,6 +894,19 @@ const unlockChatApi = async (params, credentials, password) => {
   }
 };
 
+const getSupportAssistantReply = async (credentials, payload) => {
+  try {
+    return await requestJson("/api/users/support-assistant", {
+      method: "POST",
+      headers: buildHeaders(credentials),
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.log(err);
+    throw err;
+  }
+};
+
 // ================= HELPER =================
 
 const checkFollow = (user, id) => {
@@ -912,6 +937,7 @@ export {
   markViewOnceMessage,
   deleteMessageForEveryone,
   deleteMessageForMe,
+  markChatReadApi,
   createStory,
   getStoryFeed,
   getUserStories,
@@ -927,5 +953,6 @@ export {
   setChatPasswordApi,
   removeChatPasswordApi,
   unlockChatApi,
+  getSupportAssistantReply,
   checkFollow,
 };

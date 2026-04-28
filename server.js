@@ -54,11 +54,12 @@ const broadcastPresence = async (userId, isOnline) => {
 // Bodyparser middleware
 app.use(
   bodyParser.urlencoded({
-    extended: false
+    extended: false,
+    limit: "12mb",
   })
 );
 
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "12mb" }));
 
 app.use(cors({ origin: true }));
 // Passport middleware

@@ -17,13 +17,14 @@
 }
 
 body{
-    background-color: #EAEBF0;
-    font-family: 'Lato', sans-serif;
+    background: transparent;
+    color: var(--text-main);
+    font-family: "Poppins", "Nunito", sans-serif;
 
 }
 
 nav{
-    background-color: white;
+    background-color: transparent;
 }
 
 .border_radius{

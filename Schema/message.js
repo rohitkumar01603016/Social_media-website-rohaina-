@@ -12,7 +12,12 @@ const messageSchema = mongoose.Schema(
     deletedForEveryone: { type: Boolean, default: false },
     deletedAt: { type: Date },
     chat: { type: mongoose.Schema.Types.ObjectId, ref: "Chat" },
-    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "users" }],
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "users",
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -15,6 +15,25 @@ import { useNavigate } from "react-router-dom";
 import "./profile.css";
 import NavBar from "./NavBar";
 
+const formatLastSeen = (value) => {
+  if (!value) {
+    return "Offline";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Offline";
+  }
+
+  return `Last active ${date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+};
+
 const Profile = () => {
   const params = useParams();
   const nav = useNavigate();
@@ -71,15 +90,25 @@ const clickfollow  = ()=> {
   return (
 <div>
   <NavBar/>
-      <section className="  container mt-3  py-5 rounded px-5">
-      <div className="d-flex mb-5 mt-4 ms-lg-5 ps-lg-5 ms-0 ps-0">
-        <div className="me-md-5 me-3 ms-lg-5 ms-0">
+      <section className="container mt-3 py-5 rounded px-lg-5 px-3">
+      <div className="d-flex flex-column flex-md-row align-items-center align-items-md-start mb-5 mt-4 ms-lg-5 ps-lg-5 ms-0 ps-0 gap-4">
+        <div className="me-md-5 me-0 ms-lg-5 ms-0 text-center text-md-start">
             <img src={value.user.image} alt=""  className="rounded-circle profile_img border border-light border-3"/>
         </div>
 
-        <div className=" w-50">
-            <h3 className="mt-3 mb-4">{value.user.name}</h3>
-            <div className="d-flex mb-3 mt-2 ">
+        <div className="flex-grow-1 text-center text-md-start">
+            <div className="d-flex align-items-center justify-content-center justify-content-md-start flex-wrap gap-3 mt-3 mb-3">
+              <h3 className="mb-0">{value.user.name}</h3>
+              <span
+                className={`profile-presence-chip ${value.user.isOnline ? "online" : ""}`}
+              >
+                {value.user.isOnline ? "Online now" : formatLastSeen(value.user.lastSeen)}
+              </span>
+            </div>
+            <p className="profile-handle mb-4">
+              @{(value.user.email || value.user.name || "user").split("@")[0]}
+            </p>
+            <div className="d-flex flex-wrap justify-content-center justify-content-md-start mb-3 mt-2 gap-3">
                 <div className="d-flex me-4">
                     <p className="me-1">{posts.length}</p>
                     <p>posts</p>
@@ -95,6 +124,7 @@ const clickfollow  = ()=> {
                     <p>following</p>
                 </div>
             </div>              
+            <div className="d-flex flex-wrap justify-content-center justify-content-md-start gap-2">
               {user1.id===params.id ? (<button onClick={()=>{
                 nav('/user/edit/'+user1.id)
               }} type="button" className="btn btn-dark">
@@ -109,13 +139,24 @@ const clickfollow  = ()=> {
                 <i className="fa-solid fa fa-user-plus me-2"></i>
                 Unfollow
             </button>) :null}
+            {user1.id !== params.id ? (
+              <button
+                onClick={() => nav(`/chat/join?userId=${value.user._id}`)}
+                type="button"
+                className="btn btn-outline-primary me-3 mt-2 mt-sm-0"
+              >
+                <i className="fa-regular fa-paper-plane me-2" />
+                Message
+              </button>
+            ) : null}
+            </div>
                 
         </div>
 
     </div>
         {/* profile & cover img */}
         <section className="">
-         <ul className="nav nav-pills mt-5 mt-lg-0 ms-lg-5 ms-0 " id="pills-tab" role="tablist">
+         <ul className="nav nav-pills mt-5 mt-lg-0 ms-lg-5 ms-0 flex-wrap gap-2" id="pills-tab" role="tablist">
         <li className="nav-item ms-xl-5 ms-0 ps-lg-4 ps-0" role="presentation">
           <button className="nav-link active ms-4" id="pills-home-tab" data-bs-toggle="pill" data-bs-target="#pills-home" type="button" role="tab" aria-controls="pills-home" aria-selected="true">posts</button>
         </li>
@@ -143,7 +184,7 @@ const clickfollow  = ()=> {
               tabIndex={0}
             >
                 <section className="d-flex justify-content-around mt-4">
-                     <div className="d-flex flex-column  col-5">
+                     <div className="d-flex flex-column col-12 col-md-8 col-lg-5">
 
                 {value.user.followers.map((pers, idx) => {
                   return(
@@ -177,7 +218,7 @@ const clickfollow  = ()=> {
             >
 
                   <section className="d-flex justify-content-around mt-4">
-                     <div className="d-flex flex-column  col-5">
+                     <div className="d-flex flex-column col-12 col-md-8 col-lg-5">
 
                 {value.user.following.map((pers, idx) => {
                   return(
