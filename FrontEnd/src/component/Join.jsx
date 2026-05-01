@@ -28,7 +28,7 @@ import {
   unblockUserApi,
   moderateBlockUserApi,
 } from "../api/api-post";
-import { API_BASE_URL } from "../api/client";
+import { SOCKET_URL } from "../api/client";
 import { getSender, getSenderFull, isSameSenderMargin, isSameUser } from "../config/chatLogic";
 import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
@@ -293,10 +293,12 @@ const Join = () => {
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const selectedMediaRef = useRef([]);
+  const activeChatIdRef = useRef("");
   const activeChatUserNameRef = useRef("");
   const autoOpenedQueryChatRef = useRef("");
   const openSelectedChatRef = useRef(null);
   const syncChatReadStateRef = useRef(null);
+  const activeChatId = toIdString(chat?._id || chat?.id || chat?.chatId);
 
   const getAvatar = (user) => user?.image || DEFAULT_AVATAR;
   const isSelectedUserBlocked = Array.isArray(currentUserProfile?.blockedUsers)
@@ -831,8 +833,6 @@ const Join = () => {
   };
 
   const PostMessage = async () => {
-    const activeChatId = chat?._id || chat?.id || chat?.chatId;
-
     if (!activeChatId) {
       alert("Please reopen the chat and try again.");
       return;
@@ -856,7 +856,9 @@ const Join = () => {
         );
       }
 
-      socket.emit("stop typing", activeChatId);
+      if (socket) {
+        socket.emit("stop typing", activeChatId);
+      }
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -884,7 +886,9 @@ const Join = () => {
       setShowEmojiPicker(false);
       setTyping(false);
       clearSelectedMedia();
-      socket.emit("new message", data);
+      if (socket) {
+        socket.emit("new message", data);
+      }
       setMessages((currentMessages) => [...currentMessages, data]);
       setFetchAgain((currentValue) => !currentValue);
     } catch (error) {
@@ -992,7 +996,9 @@ const Join = () => {
         await syncChatReadStateRef.current?.(chat._id);
         clearNotificationsForChat(chat._id);
         setFetchAgain((currentValue) => !currentValue);
-        socket.emit("join chat", chat._id);
+        if (socket) {
+          socket.emit("join chat", chat._id);
+        }
       } catch (error) {
         console.log(error);
       }
@@ -1000,10 +1006,29 @@ const Join = () => {
 
     loadMessages();
     selectedChatCompare = chat;
+    activeChatIdRef.current = toIdString(chat?._id || chat?.id || chat?.chatId);
   }, [chat, jwt.token, selectChat, user1.id]);
 
   useEffect(() => {
-    socket = io(API_BASE_URL || undefined);
+    const socketInstance = io(SOCKET_URL || undefined, {
+      transports: ["websocket", "polling"],
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
+    const decodedUser = jwt1(jwt.token);
+    socket = socketInstance;
+
+    const emitSetup = () => {
+      socketInstance.emit("setup", decodedUser);
+
+      if (activeChatIdRef.current) {
+        socketInstance.emit("join chat", activeChatIdRef.current);
+      }
+    };
 
     const handlePresenceUpdate = (payload) => {
       if (!payload?.userId) {
@@ -1059,27 +1084,56 @@ const Join = () => {
       setTypingUserName("");
     };
 
-    socket.on("connected", () => Setsocketc(true));
-    socket.on("presence update", handlePresenceUpdate);
-    socket.on("typing", handleTyping);
-    socket.on("stop typing", handleStopTyping);
-    socket.on("message deleted", (deletedMessage) => {
+    const handleConnect = () => {
+      Setsocketc(false);
+      emitSetup();
+    };
+
+    const handleConnected = () => Setsocketc(true);
+
+    const handleDisconnect = () => {
+      Setsocketc(false);
+      setIsTyping(false);
+      setTypingUserName("");
+    };
+
+    const handleConnectError = (error) => {
+      Setsocketc(false);
+      console.log("Socket connection error:", error.message);
+    };
+
+    const handleMessageDeleted = (deletedMessage) => {
       setMessages((currentMessages) =>
         currentMessages.map((item) =>
           item._id === deletedMessage._id ? applyDeletedMessage(item, user1.id) : item
         )
       );
       setFetchAgain((currentValue) => !currentValue);
-    });
-    socket.emit("setup", jwt1(jwt.token));
+    };
+
+    socketInstance.on("connect", handleConnect);
+    socketInstance.on("connected", handleConnected);
+    socketInstance.on("disconnect", handleDisconnect);
+    socketInstance.on("connect_error", handleConnectError);
+    socketInstance.on("presence update", handlePresenceUpdate);
+    socketInstance.on("typing", handleTyping);
+    socketInstance.on("stop typing", handleStopTyping);
+    socketInstance.on("message deleted", handleMessageDeleted);
 
     return () => {
-      socket.off("connected");
-      socket.off("presence update", handlePresenceUpdate);
-      socket.off("typing", handleTyping);
-      socket.off("stop typing", handleStopTyping);
-      socket.off("message deleted");
-      socket.disconnect();
+      socketInstance.off("connect", handleConnect);
+      socketInstance.off("connected", handleConnected);
+      socketInstance.off("disconnect", handleDisconnect);
+      socketInstance.off("connect_error", handleConnectError);
+      socketInstance.off("presence update", handlePresenceUpdate);
+      socketInstance.off("typing", handleTyping);
+      socketInstance.off("stop typing", handleStopTyping);
+      socketInstance.off("message deleted", handleMessageDeleted);
+      socketInstance.disconnect();
+
+      if (socket === socketInstance) {
+        socket = undefined;
+      }
     };
   }, [jwt.token, user1.id]);
 
@@ -1109,6 +1163,16 @@ const Join = () => {
 
     setValue1(getSenderFull({ id: user1.id }, currentChat.users));
   }, [chats, chat?._id, selectChat, user1.id]);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+
+    if (!socketcon || !activeChatId || !socket) {
+      return;
+    }
+
+    socket.emit("join chat", activeChatId);
+  }, [activeChatId, socketcon]);
 
   useEffect(() => {
     if (!socketcon) return;
@@ -1209,15 +1273,13 @@ const Join = () => {
   }, [theme]);
 
   const typingHandler = (e) => {
-    const activeChatId = chat?._id || chat?.id || chat?.chatId;
-
     if (chatBlockedForMessaging) {
       return;
     }
 
     setNewMessage(e.target.value);
 
-    if (!socketcon || !activeChatId) return;
+    if (!socketcon || !activeChatId || !socket) return;
 
     if (!typing) {
       setTyping(true);
@@ -1229,7 +1291,9 @@ const Join = () => {
     }
 
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stop typing", activeChatId);
+      if (socket) {
+        socket.emit("stop typing", activeChatId);
+      }
       setTyping(false);
     }, 3000);
   };

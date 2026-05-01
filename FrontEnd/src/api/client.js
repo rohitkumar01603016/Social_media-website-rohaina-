@@ -1,8 +1,6 @@
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/\/$/, "");
-  }
+const normalizeBaseUrl = (value) => (value ? value.replace(/\/+$/, "") : "");
 
+const getLocalApiOrigin = () => {
   if (typeof window === "undefined") {
     return "";
   }
@@ -14,7 +12,30 @@ const getApiBaseUrl = () => {
   return window.location.origin;
 };
 
+const getApiBaseUrl = () => {
+  const envUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL);
+
+  if (envUrl) {
+    return envUrl;
+  }
+
+  return getLocalApiOrigin();
+};
+
+const getSocketUrl = () => {
+  const envUrl = normalizeBaseUrl(
+    import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL
+  );
+
+  if (envUrl) {
+    return envUrl;
+  }
+
+  return getLocalApiOrigin();
+};
+
 const API_BASE_URL = getApiBaseUrl();
+const SOCKET_URL = getSocketUrl();
 const isAbsoluteUrl = (path) => /^https?:\/\//i.test(path);
 const normalizePath = (path) => (path.startsWith("/") ? path : `/${path}`);
 const buildUrl = (path) => (isAbsoluteUrl(path) ? path : `${API_BASE_URL}${normalizePath(path)}`);
@@ -91,4 +112,4 @@ const requestJson = async (path, options = {}) => {
   return parseResponse(response, path);
 };
 
-export { API_BASE_URL, requestJson };
+export { API_BASE_URL, SOCKET_URL, requestJson };

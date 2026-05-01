@@ -24,12 +24,16 @@ dotenv.config();
 
 const io = require("socket.io")(server, {
   pingTimeout: 60000,
+  transports: ["websocket", "polling"],
   cors: {
     origin: true,
+    credentials: true,
+    methods: ["GET", "POST"],
   },
 });
 
 const onlineUsers = new Map();
+const toRoomId = (value) => (value ? value.toString() : "");
 
 const broadcastPresence = async (userId, isOnline) => {
   const timestamp = new Date();
@@ -55,7 +59,12 @@ app.use(
 
 app.use(express.json({ limit: "12mb" }));
 
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 // Passport middleware
 app.use(passport.initialize());
 // Passport config
@@ -72,50 +81,82 @@ app.use("/api/story/", story);
 io.on("connection", (socket) => {
   console.log("User Connect")
 
-  socket.on("setup", async (userData) => {
-    socket.userId = userData.id;
-    socket.userName = userData.name || userData.email || "User";
-    socket.join(userData.id)
-    console.log(userData.id)
+  socket.on("setup", async (userData = {}) => {
+    const userId = toRoomId(userData.id || userData._id);
 
-    const currentSockets = onlineUsers.get(userData.id) || new Set();
+    if (!userId) {
+      socket.emit("socket error", { message: "User id is required" });
+      return;
+    }
+
+    socket.userId = userId;
+    socket.userName = userData.name || userData.email || "User";
+    socket.join(userId)
+    console.log(userId)
+
+    const currentSockets = onlineUsers.get(userId) || new Set();
     const isFirstSocket = currentSockets.size === 0;
     currentSockets.add(socket.id);
-    onlineUsers.set(userData.id, currentSockets);
+    onlineUsers.set(userId, currentSockets);
 
     if (isFirstSocket) {
-      await broadcastPresence(userData.id, true);
+      try {
+        await broadcastPresence(userId, true);
+      } catch (error) {
+        console.error("Could not broadcast online presence:", error.message);
+      }
     }
 
     socket.emit("connected")
   })
 
   socket.on("join chat", (room) => {
-    socket.join(room)
-    console.log("User Join to ROOM :  " + room)
+    const roomId = toRoomId(room);
+
+    if (!roomId) {
+      return;
+    }
+
+    socket.join(roomId)
+    console.log("User Join to ROOM :  " + roomId)
   })
 
-  socket.on("typing", (room) =>
-    socket.in(room).emit("typing", {
+  socket.on("typing", (room) => {
+    const roomId = toRoomId(room);
+
+    if (!roomId) {
+      return;
+    }
+
+    socket.in(roomId).emit("typing", {
       userId: socket.userId,
       name: socket.userName,
     })
-  );
-  socket.on("stop typing", (room) =>
-    socket.in(room).emit("stop typing", {
+  });
+  socket.on("stop typing", (room) => {
+    const roomId = toRoomId(room);
+
+    if (!roomId) {
+      return;
+    }
+
+    socket.in(roomId).emit("stop typing", {
       userId: socket.userId,
       name: socket.userName,
     })
-  );
+  });
   socket.on("new message", (newMessageRecieved) => {
     var chat = newMessageRecieved.chat;
 
     if (!chat.users) return console.log("chat.users not defined");
 
     chat.users.forEach((user) => {
-      if (user._id == newMessageRecieved.sender._id) return;
+      const recipientRoom = toRoomId(user._id || user.id || user);
+      const senderId = toRoomId(newMessageRecieved.sender?._id || newMessageRecieved.sender?.id || newMessageRecieved.sender);
 
-      socket.in(user._id).emit("message recieved", newMessageRecieved);
+      if (!recipientRoom || recipientRoom === senderId) return;
+
+      socket.in(recipientRoom).emit("message recieved", newMessageRecieved);
     });
   });
 
@@ -125,7 +166,13 @@ io.on("connection", (socket) => {
     if (!chat?.users) return;
 
     chat.users.forEach((user) => {
-      socket.in(user._id).emit("message deleted", deletedMessage);
+      const recipientRoom = toRoomId(user._id || user.id || user);
+
+      if (!recipientRoom) {
+        return;
+      }
+
+      socket.in(recipientRoom).emit("message deleted", deletedMessage);
     });
   });
 
@@ -144,7 +191,11 @@ io.on("connection", (socket) => {
 
     if (currentSockets.size === 0) {
       onlineUsers.delete(socket.userId);
-      await broadcastPresence(socket.userId, false);
+      try {
+        await broadcastPresence(socket.userId, false);
+      } catch (error) {
+        console.error("Could not broadcast offline presence:", error.message);
+      }
       return;
     }
 
