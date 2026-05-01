@@ -49,8 +49,6 @@ const broadcastPresence = async (userId, isOnline) => {
   });
 };
 
-
-
 // Bodyparser middleware
 app.use(
   bodyParser.urlencoded({
