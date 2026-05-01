@@ -5,13 +5,12 @@ import { read, unfollow } from "../api/api-post";
 import Posts from "./Posts";
 import auth from "./../auth/auth-help";
 import jwt1 from "jwt-decode";
-import { useParams } from "react-router";
 import { follow } from "../api/api-post";
 import {toast} from 'react-toastify';
 // import dependency
 import { checkFollow } from "../api/api-post";
 import { getFeedUser } from "../api/api-post";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import "./profile.css";
 import NavBar from "./NavBar";
 

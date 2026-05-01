@@ -4,9 +4,9 @@ import jwt1 from "jwt-decode";
 import { read, update, changePasswordApi, deleteAccountApi } from "../api/api-post";
 import { toast } from "react-toastify";
 import BarLoader from "react-spinners/PulseLoader";
-import { useParams } from "react-router";
-import NavBar from "./NavBar";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import NavBar from "./NavBar";
 
 const EditProfile = () => {
   const nav = useNavigate();

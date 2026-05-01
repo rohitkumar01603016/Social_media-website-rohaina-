@@ -1,14 +1,7 @@
-import dotenv from "dotenv";
-
-dotenv.config();
-
-console.log("Fuck");
 const getApiBaseUrl = () => {
-  // console.log("-------------->",process.env.REACT_APP_API_URL);
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL.replace(/\/$/, "");
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, "");
   }
-
 
   if (typeof window === "undefined") {
     return "";
@@ -22,10 +15,9 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
-
-console.log(API_BASE_URL);
-
-const buildUrl = (path) => `${API_BASE_URL}${path}`;
+const isAbsoluteUrl = (path) => /^https?:\/\//i.test(path);
+const normalizePath = (path) => (path.startsWith("/") ? path : `/${path}`);
+const buildUrl = (path) => (isAbsoluteUrl(path) ? path : `${API_BASE_URL}${normalizePath(path)}`);
 
 const extractErrorMessage = (data, fallbackMessage) => {
   if (!data) {

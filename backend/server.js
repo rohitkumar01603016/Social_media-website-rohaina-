@@ -11,10 +11,8 @@ const message = require("./Routes/api/message")
 const story = require("./Routes/api/story")
 const dotenv = require("dotenv");
 const cors = require('cors');
-const bodyParser = require("body-parser");
 const passport = require("passport");
 const http = require('http');
-const socketio = require('socket.io');
 const errorHandler = require("./middleware/error");
 const server = http.createServer(app)
 const path = require("path");
@@ -27,8 +25,7 @@ dotenv.config();
 const io = require("socket.io")(server, {
   pingTimeout: 60000,
   cors: {
-    origin: "http://localhost:3000",
-    // credentials: true,
+    origin: true,
   },
 });
 
@@ -49,15 +46,14 @@ const broadcastPresence = async (userId, isOnline) => {
   });
 };
 
-// Bodyparser middleware
 app.use(
-  bodyParser.urlencoded({
+  express.urlencoded({
     extended: false,
     limit: "12mb",
   })
 );
 
-app.use(bodyParser.json({ limit: "12mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 app.use(cors({ origin: true }));
 // Passport middleware
@@ -159,7 +155,15 @@ io.on("connection", (socket) => {
 // --------------------------deployment------------------------------
 
 const __dirname1 = path.resolve();
-const frontendBuildPath = path.join(__dirname1, "FrontEnd", "build");
+const frontendBuildCandidates = [
+  path.join(__dirname1, "FrontEnd", "dist"),
+  path.join(__dirname1, "frontend", "dist"),
+  path.join(__dirname1, "FrontEnd", "build"),
+  path.join(__dirname1, "frontend", "build"),
+];
+const frontendBuildPath = frontendBuildCandidates.find((candidate) =>
+  fs.existsSync(path.join(candidate, "index.html"))
+) || frontendBuildCandidates[0];
 const frontendIndexPath = path.join(frontendBuildPath, "index.html");
 const hasFrontendBuild = fs.existsSync(frontendIndexPath);
 
@@ -172,7 +176,7 @@ if (process.env.NODE_ENV === "production" && hasFrontendBuild) {
 } else {
   app.get("/", (req, res) => {
     if (process.env.NODE_ENV === "production" && !hasFrontendBuild) {
-      return res.status(200).send("API is running. FrontEnd build not found.");
+      return res.status(200).send("API is running. frontend build not found.");
     }
 
     res.send("API is running..");
@@ -200,5 +204,3 @@ const startServer = async () => {
 };
 
 startServer();
-
-

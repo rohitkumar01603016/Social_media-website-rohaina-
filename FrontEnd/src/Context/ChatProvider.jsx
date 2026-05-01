@@ -1,21 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from "react"
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 
 
 const ChatContext = createContext();
 
 
 const ChatProvider = ({ children }) => {
- 
-   const v = useNavigate();
+  const navigate = useNavigate();
 
   const [user, setUser] = useState();
-  
-  const user1 = JSON.parse(localStorage.getItem("user1"));
- 
-  
-    v("/login")
-  
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("userInfo1");
+
+    if (!storedUser) {
+      navigate("/login");
+      return;
+    }
+
+    setUser(JSON.parse(storedUser));
+  }, [navigate]);
 
 
   return (
