@@ -5,6 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from "react-router-dom";
 import PulseLoader from "react-spinners/PulseLoader";
 import { requestJson } from "../api/client";
+import auth from "../auth/auth-help";
 
 
 const Login = () => {
@@ -15,7 +16,7 @@ const nav = useNavigate();
 
 
  useEffect(()=>{
-    if(localStorage.getItem("userInfo1"))
+    if(auth.isAuthenticated())
     {
          nav('/s')
     }

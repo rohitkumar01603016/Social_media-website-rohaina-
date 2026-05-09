@@ -1,12 +1,13 @@
 import "react-toastify/dist/ReactToastify.css";
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import auth from "../auth/auth-help";
 
 const Home = () => {
   const nav = useNavigate();
 
   useEffect(() => {
-    if (localStorage.getItem("userInfo1")) {
+    if (auth.isAuthenticated()) {
       nav("/s");
     }
   }, [nav]);

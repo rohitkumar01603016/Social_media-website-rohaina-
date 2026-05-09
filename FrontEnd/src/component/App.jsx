@@ -19,22 +19,55 @@ const AppChrome = () => {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route
-          path="*"
+          path="/s"
           element={
             <PrivateRoute>
-              <Routes>
-                <Route path="/s" element={<HomePage />} />
-                <Route path="/user/:id" element={<Profile />} />
-                <Route path="/user/edit/:id" element={<EditProfile />} />
-                <Route path="/chat/join" element={<Join />} />
-                <Route path="/support" element={<SupportAssistantPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
+              <HomePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/user/:id"
+          element={
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/user/edit/:id"
+          element={
+            <PrivateRoute>
+              <EditProfile />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/chat/join"
+          element={
+            <PrivateRoute>
+              <Join />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <PrivateRoute>
+              <SupportAssistantPage />
             </PrivateRoute>
           }
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="*"
+          element={
+            <PrivateRoute>
+              <NotFoundPage />
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </>
   );

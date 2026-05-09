@@ -1,9 +1,10 @@
 import { Navigate } from "react-router-dom";
+import auth from "../auth/auth-help";
 
 function PrivateRoute({ children }) {
-  const auth = localStorage.getItem("userInfo1");
+  const user = auth.isAuthenticated();
 
-  return auth ? children : <Navigate to="/login" />;
+  return user ? children : <Navigate to="/login" replace />;
 }
 
 export default PrivateRoute;

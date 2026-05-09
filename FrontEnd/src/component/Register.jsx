@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PulseLoader from "react-spinners/PulseLoader";
 import { Link } from 'react-router-dom';
 import { requestJson } from "../api/client";
+import auth from "../auth/auth-help";
 
 const Register = () => {
 let [loading, setLoading] = useState(false);
@@ -12,7 +13,7 @@ const color = "#000000";
 const nav = useNavigate();
 
  useEffect(()=>{
-    if(localStorage.getItem("userInfo1"))
+    if(auth.isAuthenticated())
     {
          nav('/s')
     }
