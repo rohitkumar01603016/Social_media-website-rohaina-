@@ -59,8 +59,7 @@ This project demonstrates strong understanding of **full-stack development, REST
 
 ## 🔗 Links
 
-* 🌍 Live Deployment: https://your-deployment-link
-* 📦 GitHub Repository: https://github.com/YOUR_USERNAME/YOUR_REPO
+* 🌍 Live Deployment: https://social-media-website-rohaina-6ugx.vercel.app/s
 
 ---
 
